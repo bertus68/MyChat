@@ -12,6 +12,7 @@
 		android:background="@drawable/border"
 		android:gravity="top"
 		android:scrollbars="vertical"
+		android:textAppearance="?android:attr/textAppearanceLarge"
 		android:text=""/>
 
 	<EditText
@@ -22,6 +23,7 @@
 		android:background="@drawable/border"
 		android:gravity="top"
 		android:scrollbars="vertical"
+		android:textAppearance="?android:attr/textAppearanceLarge"
 		android:text=""/>
 	
 </LinearLayout>

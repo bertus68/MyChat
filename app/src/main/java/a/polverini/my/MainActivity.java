@@ -36,9 +36,9 @@ public class MainActivity extends Activity
 		handler = new TextHandler(text);
 		
 		alias.put("192.168.1.3", "Alberto");
-		alias.put("192.168.1.4", "Sabrina");
+		alias.put("192.168.1.4", "Sofia");
 		
-		final String host = "192.168.1.255"; // "255.255.255.255";
+		final String host = "192.168.1.255"; 
 		final int port = 10000;
 		
 		edit = findViewById(R.id.edit);
@@ -59,6 +59,7 @@ public class MainActivity extends Activity
 		);
 		
 		print("MyChat 0.1.2\n");
+		
 		task = new BroadcastTask(host, port);
 		task.execute();
     }
@@ -245,11 +246,11 @@ public class MainActivity extends Activity
 	
 	public static class TextHandler extends Handler {
 
-		private TextView view;
+		private TextView text;
 
-		public TextHandler(TextView view) {
+		public TextHandler(TextView text) {
 			super(Looper.getMainLooper());
-			this.view = view;
+			this.text = text;
 		}
 
 		@Override
@@ -260,7 +261,7 @@ public class MainActivity extends Activity
 						String[] args = ((String)message.obj).split(" ");
 						switch (args[0]) {
 							case "clear":
-								view.setText("");
+								text.setText("");
 								break;
 							default:
 								break;
@@ -269,7 +270,15 @@ public class MainActivity extends Activity
 					break;
 				case 1:
 					if(message.obj instanceof String) {
-						view.append((String)message.obj);
+						text.append((String)message.obj);
+						Layout layout = text.getLayout();
+						if(layout!=null)  {
+							int top = layout.getLineTop(text.getLineCount());
+							int bottom = text.getBottom();
+							if(top>bottom) {
+								text.scrollTo(0, top-bottom);
+							}
+						}
 					}
 					break;
 				default:
