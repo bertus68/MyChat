@@ -3,15 +3,5 @@
 
     <string name="app_name">MyChat</string>
     <string name="hello">Hello!</string>
-
-	<string name="addr_key">addr</string>
-	<string name="addr_default">127.0.0.255</string>
-	<string name="addr_title">addr</string>
-	<string name="addr_summary">addr</string>
-	
-	<string name="port_key">port</string>
-	<string name="port_default">10000</string>
-	<string name="port_title">port</string>
-	<string name="port_summary">port</string>
 	
 </resources>

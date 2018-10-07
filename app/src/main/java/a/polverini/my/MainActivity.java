@@ -12,6 +12,7 @@ import java.util.concurrent.*;
 import android.view.*;
 import android.content.*;
 import android.preference.*;
+import android.text.method.*;
 
 public class MainActivity extends Activity 
 {
@@ -20,10 +21,9 @@ public class MainActivity extends Activity
 	private TextView text;
 	private EditText edit;
 	private BroadcastTask task;
-
 	private Menu menu;
 
-	private SharedPreferences preferences;
+	private Map<String, String> alias = new HashMap<>();
 	
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -31,59 +31,34 @@ public class MainActivity extends Activity
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 		
-		preferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext()); 
-		preferences.registerOnSharedPreferenceChangeListener(new SharedPreferences.OnSharedPreferenceChangeListener() {
-				@Override
-				public void onSharedPreferenceChanged(SharedPreferences preferences, String key) {
-					updatePreference(preferences, key);
-				}
-			});
-		
-		
 		text = findViewById(R.id.text);
+		text.setMovementMethod(new ScrollingMovementMethod());
 		handler = new TextHandler(text);
 		
-		final String host = "192.168.1.255";
+		alias.put("192.168.1.3", "Alberto");
+		alias.put("192.168.1.4", "Sabrina");
+		
+		final String host = "192.168.1.255"; // "255.255.255.255";
 		final int port = 10000;
 		
 		edit = findViewById(R.id.edit);
-		edit.addTextChangedListener(new TextWatcher() {
-
+		edit.setInputType(InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+		edit.setMovementMethod(new ScrollingMovementMethod());
+		edit.setOnEditorActionListener(
+			new EditText.OnEditorActionListener() {
 				@Override
-				public void beforeTextChanged(CharSequence p1, int p2, int p3, int p4)
-				{
-					
-				}
-
-				String tosend="";
-				@Override
-				public void onTextChanged(CharSequence p1, int p2, int p3, int p4)
-				{
-					String s = p1.toString().substring(p2);
-					switch(s) {
-						case "\n":
-							if(task!=null) {
-								task.send(host, port, tosend);
-							}
-							tosend="";
-							edit.setText("");
-							break;
-						default:
-							tosend=s;
-							break;
+				public boolean onEditorAction(TextView view, int actionId, KeyEvent event) {
+					String s = view.getText().toString();
+					if(task!=null) {
+						task.queue(host, port, s);
 					}
-					
+					view.setText("");
+					return true;          
 				}
-
-				@Override
-				public void afterTextChanged(Editable editable)
-				{
-					
-				}
-
-			});
-			
-		print("MyChat 0.1.1\n");
+			}
+		);
+		
+		print("MyChat 0.1.2\n");
 		task = new BroadcastTask(host, port);
 		task.execute();
     }
@@ -100,7 +75,6 @@ public class MainActivity extends Activity
 		try {
 			switch (item.getItemId()) {
 				case R.id.pref:
-					startActivity(new Intent(this, MyPreferencesActivity.class));
 					break;
 				default:
 					return super.onOptionsItemSelected(item);
@@ -109,41 +83,6 @@ public class MainActivity extends Activity
 			print(e);
 		}
 		return true;
-	}
-
-	public static class MyPreferencesActivity extends PreferenceActivity {
-
-		@Override
-		protected void onCreate(Bundle savedInstanceState) { 
-			super.onCreate(savedInstanceState); 
-			getFragmentManager().beginTransaction().replace(android.R.id.content, new MyPreferenceFragment()).commit(); 
-		} 
-
-		public static class MyPreferenceFragment extends PreferenceFragment { 
-			@Override 
-			public void onCreate(final Bundle savedInstanceState) { 
-				super.onCreate(savedInstanceState); 
-				addPreferencesFromResource(R.xml.preferences); 
-			} 
-		} 
-	}
-	
-	private void updatePreference(SharedPreferences preferences, String key) {
-		try {
-			switch(key) {
-				case "addr":
-					print("%s = %s\n",key,preferences.getString(key, ""));
-					break;
-				case "port":
-					print("%s = %s\n",key,preferences.getString(key, ""));
-					break;
-				default:
-					print("unexpected preference %s\n",key);
-					break;
-			}
-		} catch (Exception e) {
-			print(e);
-		}
 	}
 	
 	private class BroadcastTask extends AsyncTask {
@@ -160,7 +99,7 @@ public class MainActivity extends Activity
 			try {
 				consumer = new Consumer();
 				consumer.start();
-				this.addr = InetAddress.getByName("255.255.255.255");
+				this.addr = InetAddress.getByName(host);
 				this.port = port;
 				this.buffer = new byte[1024];
 				this.packet = new DatagramPacket(buffer, buffer.length);
@@ -200,7 +139,6 @@ public class MainActivity extends Activity
 			public void add(DatagramPacket packet) {
 				try {
 					queue.put(packet);
-					print("queued\n");
 				} catch (InterruptedException e) {
 					print(TAG2+".add() ", e);
 				}
@@ -235,26 +173,25 @@ public class MainActivity extends Activity
 		public void send(DatagramPacket packet) 
 		{
 			try {
-				DatagramSocket socket = new DatagramSocket(10001);
+				DatagramSocket socket = new DatagramSocket();
 				socket.setReuseAddress(true);
 				socket.setBroadcast(true);
 				socket.send(packet);
 				sent(packet.getAddress().getHostAddress(), packet.getPort(), new String(packet.getData()).trim());
-				Thread.sleep(1000);
 				socket.close();
 			} catch (Exception e) {
-				print(TAG1+".send(2) ", e);
+				print(TAG1+".send() ", e);
 			}
 		}
 		
-		public void send(final String addr, final int port, final String message) 
+		public void queue(final String addr, final int port, final String message) 
 		{
 			try {
 				byte[] b = message.getBytes();
-				DatagramPacket packet = new DatagramPacket(b, b.length, InetAddress.getByName("255.255.255.255"), port);
+				DatagramPacket packet = new DatagramPacket(b, b.length, InetAddress.getByName(addr), port);
 				consumer.add(packet);
 			} catch (Exception e) {
-				print(TAG1+".send(1) ", e);
+				print(TAG1+".queue() ", e);
 			}
 		}
 		
@@ -264,11 +201,13 @@ public class MainActivity extends Activity
 				return;
 			}
 			try {
+				
 				this.packet.setLength(buffer.length);
 				this.socket.receive(packet);
 				String addr = packet.getAddress().getHostAddress();
 				int port = packet.getPort();
-				String message = new String(packet.getData()).trim();
+				String message = new String(packet.getData(), 0, packet.getLength());
+				//String message = new String(packet.getData()).trim();
 				received(addr, port, message);
 			} catch (Exception e) {
 				print(TAG1+".receive() ", e);
@@ -277,12 +216,29 @@ public class MainActivity extends Activity
 		
 		private void received(String addr, int port, String message)
 		{
-			print("received %s:%d > %s\n", addr, port, message);
+			if(verbose) {
+				print("received %s:%d > %s\n", addr, port, message);
+			} else {
+				switch(message) {
+					case "clear":
+						command(message);
+						break;
+					default:
+						break;
+					
+				}
+				if(alias.containsKey(addr)) {
+					print("%s: ",alias.get(addr));
+				}
+				print("%s\n", message);
+			}
 		}
 		
 		private void sent(String addr, int port, String message)
 		{
-			print("sent %s:%d < %s\n", addr, port, message);
+			if(verbose) {
+				print("sent %s:%d < %s\n", addr, port, message);
+			}
 		}
 		
 	}
