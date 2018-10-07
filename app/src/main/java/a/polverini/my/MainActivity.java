@@ -7,6 +7,8 @@ import java.io.*;
 import android.text.*;
 import android.util.*;
 import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class MainActivity extends Activity 
 {
@@ -77,9 +79,12 @@ public class MainActivity extends Activity
 		private DatagramPacket packet;
 		private DatagramSocket socket;
 		private Boolean running;
-		
+		private Consumer consumer;
+
 		public BroadcastTask(final String host, final int port) {
 			try {
+				consumer = new Consumer();
+				consumer.start();
 				this.addr = InetAddress.getByName(host);
 				this.port = port;
 				this.buffer = new byte[1024];
@@ -88,6 +93,42 @@ public class MainActivity extends Activity
 			} catch (Exception e) {
 				print(e);
 			} 
+		}
+		
+		public class Consumer extends Thread {
+
+			private final BlockingQueue<DatagramPacket> queue;
+
+			public Consumer() { 
+				this.queue = new ArrayBlockingQueue<>(100); 
+			}
+
+			@Override
+			public void run() {
+				try {
+					while (true) { 
+						consume(queue.take()); 
+					}
+				} catch (InterruptedException e) { 
+					print(e);
+				}
+			}
+
+			void consume(DatagramPacket packet) {
+				if(running) {
+					send(packet);
+				}
+			}
+			
+			public void add(DatagramPacket packet) {
+				try {
+					queue.put(packet);
+					print("queued\n");
+				} catch (InterruptedException e) {
+					print(e);
+				}
+			}
+			
 		}
 		
 		@Override
@@ -114,6 +155,16 @@ public class MainActivity extends Activity
 			return null;
 		}
 		
+		public void send(DatagramPacket packet) 
+		{
+			try {
+				socket.send(packet);
+				sent(packet.getAddress().getHostAddress(), packet.getPort(), new String(packet.getData()).trim());
+			} catch (Exception e) {
+				print(e);
+			}
+		}
+		
 		public void send(final String addr, final int port, final String message) 
 		{
 			try {
@@ -121,10 +172,7 @@ public class MainActivity extends Activity
 				DatagramPacket packet = new DatagramPacket(b, b.length);
 				packet.setAddress(InetAddress.getByName(addr));
 				packet.setPort(port);
-				DatagramSocket socket = new DatagramSocket();
-				socket.setBroadcast(true);
-				socket.send(packet);
-				sent(packet.getAddress().getHostAddress(), packet.getPort(), new String(packet.getData()).trim());
+				consumer.add(packet);
 			} catch (Exception e) {
 				print(e);
 			}
