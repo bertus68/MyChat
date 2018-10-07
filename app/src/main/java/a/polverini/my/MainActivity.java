@@ -9,6 +9,9 @@ import android.util.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+import android.view.*;
+import android.content.*;
+import android.preference.*;
 
 public class MainActivity extends Activity 
 {
@@ -17,6 +20,10 @@ public class MainActivity extends Activity
 	private TextView text;
 	private EditText edit;
 	private BroadcastTask task;
+
+	private Menu menu;
+
+	private SharedPreferences preferences;
 	
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -24,10 +31,19 @@ public class MainActivity extends Activity
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 		
+		preferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext()); 
+		preferences.registerOnSharedPreferenceChangeListener(new SharedPreferences.OnSharedPreferenceChangeListener() {
+				@Override
+				public void onSharedPreferenceChanged(SharedPreferences preferences, String key) {
+					updatePreference(preferences, key);
+				}
+			});
+		
+		
 		text = findViewById(R.id.text);
 		handler = new TextHandler(text);
 		
-		final String host = "127.0.0.255";
+		final String host = "192.168.1.255";
 		final int port = 10000;
 		
 		edit = findViewById(R.id.edit);
@@ -67,12 +83,71 @@ public class MainActivity extends Activity
 
 			});
 			
-		print("MyChat 0.1.0\n");
+		print("MyChat 0.1.1\n");
 		task = new BroadcastTask(host, port);
 		task.execute();
     }
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getMenuInflater().inflate(R.menu.main, menu);
+		this.menu = menu;
+		return true;
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		try {
+			switch (item.getItemId()) {
+				case R.id.pref:
+					startActivity(new Intent(this, MyPreferencesActivity.class));
+					break;
+				default:
+					return super.onOptionsItemSelected(item);
+			}
+		} catch(Exception e) {
+			print(e);
+		}
+		return true;
+	}
+
+	public static class MyPreferencesActivity extends PreferenceActivity {
+
+		@Override
+		protected void onCreate(Bundle savedInstanceState) { 
+			super.onCreate(savedInstanceState); 
+			getFragmentManager().beginTransaction().replace(android.R.id.content, new MyPreferenceFragment()).commit(); 
+		} 
+
+		public static class MyPreferenceFragment extends PreferenceFragment { 
+			@Override 
+			public void onCreate(final Bundle savedInstanceState) { 
+				super.onCreate(savedInstanceState); 
+				addPreferencesFromResource(R.xml.preferences); 
+			} 
+		} 
+	}
+	
+	private void updatePreference(SharedPreferences preferences, String key) {
+		try {
+			switch(key) {
+				case "addr":
+					print("%s = %s\n",key,preferences.getString(key, ""));
+					break;
+				case "port":
+					print("%s = %s\n",key,preferences.getString(key, ""));
+					break;
+				default:
+					print("unexpected preference %s\n",key);
+					break;
+			}
+		} catch (Exception e) {
+			print(e);
+		}
+	}
 	
 	private class BroadcastTask extends AsyncTask {
+		private final String TAG1 = "BroadcastTask";
 		private InetAddress addr;
 		private int port;
 		private byte[] buffer;
@@ -85,7 +160,7 @@ public class MainActivity extends Activity
 			try {
 				consumer = new Consumer();
 				consumer.start();
-				this.addr = InetAddress.getByName(host);
+				this.addr = InetAddress.getByName("255.255.255.255");
 				this.port = port;
 				this.buffer = new byte[1024];
 				this.packet = new DatagramPacket(buffer, buffer.length);
@@ -97,6 +172,8 @@ public class MainActivity extends Activity
 		
 		public class Consumer extends Thread {
 
+			private final String TAG2 = "Consumer";
+			
 			private final BlockingQueue<DatagramPacket> queue;
 
 			public Consumer() { 
@@ -110,7 +187,7 @@ public class MainActivity extends Activity
 						consume(queue.take()); 
 					}
 				} catch (InterruptedException e) { 
-					print(e);
+					print(TAG2+".run() ", e);
 				}
 			}
 
@@ -125,7 +202,7 @@ public class MainActivity extends Activity
 					queue.put(packet);
 					print("queued\n");
 				} catch (InterruptedException e) {
-					print(e);
+					print(TAG2+".add() ", e);
 				}
 			}
 			
@@ -146,7 +223,7 @@ public class MainActivity extends Activity
 				}
 			}
 			catch (Exception e) {
-				print(e);
+				print(TAG1+".doInBackground(...) ", e);
 			} finally {
 				running = false;
 				socket.close();
@@ -158,10 +235,15 @@ public class MainActivity extends Activity
 		public void send(DatagramPacket packet) 
 		{
 			try {
+				DatagramSocket socket = new DatagramSocket(10001);
+				socket.setReuseAddress(true);
+				socket.setBroadcast(true);
 				socket.send(packet);
 				sent(packet.getAddress().getHostAddress(), packet.getPort(), new String(packet.getData()).trim());
+				Thread.sleep(1000);
+				socket.close();
 			} catch (Exception e) {
-				print(e);
+				print(TAG1+".send(2) ", e);
 			}
 		}
 		
@@ -169,12 +251,10 @@ public class MainActivity extends Activity
 		{
 			try {
 				byte[] b = message.getBytes();
-				DatagramPacket packet = new DatagramPacket(b, b.length);
-				packet.setAddress(InetAddress.getByName(addr));
-				packet.setPort(port);
+				DatagramPacket packet = new DatagramPacket(b, b.length, InetAddress.getByName("255.255.255.255"), port);
 				consumer.add(packet);
 			} catch (Exception e) {
-				print(e);
+				print(TAG1+".send(1) ", e);
 			}
 		}
 		
@@ -191,7 +271,7 @@ public class MainActivity extends Activity
 				String message = new String(packet.getData()).trim();
 				received(addr, port, message);
 			} catch (Exception e) {
-				print(e);
+				print(TAG1+".receive() ", e);
 			}
 		}
 		
@@ -251,8 +331,8 @@ public class MainActivity extends Activity
 		handler.obtainMessage(1, s).sendToTarget();
 	}
 
-	public void print(Exception e) {
-		print("%s %s\n", e.getClass().getSimpleName(), e.getMessage());
+	public void print(String s, Exception e) {
+		print("%s %s %s\n", s, e.getClass().getSimpleName(), e.getMessage());
 		if(verbose) {
 			StringWriter sw = new StringWriter();
 			PrintWriter pw = new PrintWriter(sw);
@@ -260,6 +340,10 @@ public class MainActivity extends Activity
 			pw.close();
 			print("%s\n", sw.getBuffer().toString());
 		}
+	}
+	
+	public void print(Exception e) {
+		print("", e);
 	}
 	
 }
