@@ -58,7 +58,7 @@ public class MainActivity extends Activity
 			}
 		);
 		
-		print("MyChat 0.1.2\n");
+		print("MyChat 0.1.3\n");
 		
 		task = new BroadcastTask(host, port);
 		task.execute();
